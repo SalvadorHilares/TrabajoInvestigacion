@@ -147,13 +147,13 @@ resource "aws_ecs_task_definition" "api_task" {
 
   container_definitions = jsonencode([
     {
-      name      = "api"
-      image     = "${var.account_id}.dkr.ecr.${var.region}.amazonaws.com/${aws_ecr_repository.api_repo.name}:${var.image_tag}"
+      name      = "fastapi-container"
+      image     = "938209751559.dkr.ecr.us-east-1.amazonaws.com/fastapi-students:latest"
       essential = true
       portMappings = [
         {
-          containerPort = var.app_port
-          hostPort      = var.app_port
+          containerPort = 8080
+          hostPort      = 8080
           protocol      = "tcp"
         }
       ]
@@ -176,6 +176,7 @@ resource "aws_ecs_service" "api_service" {
   task_definition = aws_ecs_task_definition.api_task.arn
   desired_count   = 1
   launch_type     = "FARGATE"
+  force_new_deployment = true
 
   network_configuration {
     subnets         = data.aws_subnets.default.ids
