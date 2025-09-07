@@ -7,6 +7,11 @@ variable "region" {
 variable "account_id" {
   type        = string
   description = "Tu AWS Account ID (ej. 478701513931)"
+  
+  validation {
+    condition     = can(regex("^[0-9]{12}$", var.account_id))
+    error_message = "Account ID debe ser un número de 12 dígitos."
+  }
 }
 
 variable "iam_role_arn" {
@@ -27,4 +32,9 @@ variable "image_tag" {
 variable "app_port" {
   type        = number
   default     = 8080
+  
+  validation {
+    condition     = var.app_port >= 1024 && var.app_port <= 65535
+    error_message = "El puerto debe estar entre 1024 y 65535."
+  }
 }

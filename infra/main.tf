@@ -15,6 +15,13 @@ data "aws_subnets" "default" {
 # ECR para imágenes
 resource "aws_ecr_repository" "api_repo" {
   name = var.repo_name
+  force_delete = true
+  
+  tags = {
+    Name        = "FastAPI ECR Repository"
+    Environment = "dev"
+    Project     = "fastapi-ecs"
+  }
 }
 
 resource "aws_ecr_lifecycle_policy" "api_repo_policy" {
@@ -62,6 +69,12 @@ resource "aws_security_group" "alb_sg" {
     cidr_blocks = ["0.0.0.0/0"]
     ipv6_cidr_blocks = ["::/0"]
   }
+  
+  tags = {
+    Name        = "ALB Security Group"
+    Environment = "dev"
+    Project     = "fastapi-ecs"
+  }
 }
 
 resource "aws_security_group" "ecs_sg" {
@@ -84,6 +97,12 @@ resource "aws_security_group" "ecs_sg" {
     cidr_blocks = ["0.0.0.0/0"]
     ipv6_cidr_blocks = ["::/0"]
   }
+  
+  tags = {
+    Name        = "ECS Security Group"
+    Environment = "dev"
+    Project     = "fastapi-ecs"
+  }
 }
 
 # ALB + Target Group + Listener
@@ -92,6 +111,12 @@ resource "aws_lb" "api_alb" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
   subnets            = data.aws_subnets.default.ids
+  
+  tags = {
+    Name        = "FastAPI ALB"
+    Environment = "dev"
+    Project     = "fastapi-ecs"
+  }
 }
 
 resource "aws_lb_target_group" "api_tg" {
@@ -113,7 +138,7 @@ resource "aws_lb_target_group" "api_tg" {
 
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.api_alb.arn
-  port              = 80
+  port              = "80"
   protocol          = "HTTP"
 
   default_action {
@@ -125,12 +150,24 @@ resource "aws_lb_listener" "http" {
 # ECS Cluster
 resource "aws_ecs_cluster" "api_cluster" {
   name = "fastapi-cluster"
+  
+  tags = {
+    Name        = "FastAPI ECS Cluster"
+    Environment = "dev"
+    Project     = "fastapi-ecs"
+  }
 }
 
 # Logs
 resource "aws_cloudwatch_log_group" "api_logs" {
   name              = "/ecs/fastapi"
   retention_in_days = 7
+  
+  tags = {
+    Name        = "FastAPI ECS Logs"
+    Environment = "dev"
+    Project     = "fastapi-ecs"
+  }
 }
 
 # Task Definition (usa LabRole como taskRole/executionRole)
@@ -147,13 +184,12 @@ resource "aws_ecs_task_definition" "api_task" {
 
   container_definitions = jsonencode([
     {
-      name      = "fastapi-container"
-      image     = "938209751559.dkr.ecr.us-east-1.amazonaws.com/fastapi-students:latest"
+      name      = "api"
+      image = "${var.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.repo_name}:${var.image_tag}"
       essential = true
       portMappings = [
         {
-          containerPort = 8080
-          hostPort      = 8080
+          containerPort = var.app_port
           protocol      = "tcp"
         }
       ]
