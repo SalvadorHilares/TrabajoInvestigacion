@@ -191,24 +191,3 @@ resource "aws_ecs_service" "api_service" {
 
   depends_on = [aws_lb_listener.http]
 }
-
-resource "aws_iam_role_policy" "labrole_passrole" {
-  name = "AllowPassRoleToECS"
-  role = "LabRole"
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect   = "Allow",
-        Action   = "iam:PassRole",
-        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/ecsTaskExecutionRole",
-        Condition = {
-          StringEquals = {
-            "iam:PassedToService" = "ecs-tasks.amazonaws.com"
-          }
-        }
-      }
-    ]
-  })
-}
