@@ -48,6 +48,10 @@ def get_db():
 def root():
     return {"message": "API de estudiantes funcionando en ECS con Fargate!"}
 
+@app.get("/test")
+def test():
+    return {"message": "Test exitoso!"}
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
