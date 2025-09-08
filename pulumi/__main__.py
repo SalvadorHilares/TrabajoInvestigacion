@@ -8,7 +8,29 @@ import pulumi_aws as aws
 
 # Configuración
 config = pulumi.Config()
-region = config.require("aws:region")
+
+# DEBUGGING: Print all config keys that Pulumi *thinks* it has
+pulumi.log.info("--- DEBUGGING CONFIG KEYS ---")
+for key in config.keys():
+    pulumi.log.info(f"Found config key: {key} = {config.get(key, secret=True)}")
+pulumi.log.info("--- END DEBUGGING CONFIG KEYS ---")
+
+# Try to get the region, handling the unexpected prefixed key if necessary
+try:
+    region = config.require("aws:region")
+    pulumi.log.info(f"Successfully retrieved region: {region}")
+except Exception as e:
+    pulumi.log.error(f"Failed to retrieve 'aws:region' directly: {e}")
+    pulumi.log.info("Attempting to retrieve 'fastapi-ecs-pulumi:aws:region' as a fallback...")
+    try:
+        # This is the problematic key Pulumi is complaining about.
+        # We'll try to get it this way if the direct way fails.
+        region = config.require(f"{pulumi.get_project()}:aws:region")
+        pulumi.log.info(f"Successfully retrieved region with project prefix: {region}")
+    except Exception as e_prefixed:
+        pulumi.log.error(f"Failed to retrieve prefixed region either: {e_prefixed}")
+        raise Exception(f"Failed to retrieve AWS region. Original error: {e}") from e
+
 account_id = config.require("account_id")
 iam_role_arn = config.require("iam_role_arn")
 repo_name = config.require("repo_name")
