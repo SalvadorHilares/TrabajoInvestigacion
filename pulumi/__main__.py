@@ -38,7 +38,8 @@ ecr_repo = aws.ecr.Repository(
     "api-repo",
     name=repo_name,
     force_delete=True,
-    tags=common_tags
+    tags=common_tags,
+    opts=pulumi.ResourceOptions(import_=repo_name)
 )
 
 # ECR Lifecycle Policy
