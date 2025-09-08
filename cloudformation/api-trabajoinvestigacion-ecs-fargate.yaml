@@ -1,0 +1,185 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'api_trabajoinvestigacion en ECS Fargate con ALB y ECR (sin CodeBuild)'
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.31.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: api-trabajoinvestigacion-vpc }]
+
+  IGW:
+    Type: AWS::EC2::InternetGateway
+
+  IGWAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref IGW
+      VpcId: !Ref VPC
+
+  PublicRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IGWAttach
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+      RouteTableId: !Ref PublicRT
+
+  SubnetPublic1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.31.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags: [{ Key: Name, Value: api-trabajoinvestigacion-public-1 }]
+
+  SubnetPublic2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.31.2.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags: [{ Key: Name, Value: api-trabajoinvestigacion-public-2 }]
+
+  AssocPub1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetPublic1
+      RouteTableId: !Ref PublicRT
+
+  AssocPub2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetPublic2
+      RouteTableId: !Ref PublicRT
+
+  AlbSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP 80 from Internet
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0 }
+      SecurityGroupEgress:
+        - { IpProtocol: -1, FromPort: 0, ToPort: 0, CidrIp: 0.0.0.0/0 }
+      Tags: [{ Key: Name, Value: api-trabajoinvestigacion-alb-sg }]
+
+  ServiceSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ALB to Tasks 8000
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          SourceSecurityGroupId: !Ref AlbSG
+      SecurityGroupEgress:
+        - { IpProtocol: -1, FromPort: 0, ToPort: 0, CidrIp: 0.0.0.0/0 }
+      Tags: [{ Key: Name, Value: api-trabajoinvestigacion-ecs-sg }]
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties: { ClusterName: api-trabajoinvestigacion-cluster }
+
+  ECRRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: api-trabajoinvestigacion
+      ImageScanningConfiguration: { ScanOnPush: true }
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          { "rules": [ { "rulePriority": 1, "description": "keep last 10",
+            "selection": { "tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 10 },
+            "action": { "type": "expire" } } ] }
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/${AWS::StackName}
+      RetentionInDays: 7
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: api-trabajoinvestigacion
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      TaskRoleArn:      !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      ContainerDefinitions:
+        - Name: web
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepo}:latest"
+          PortMappings: [ { ContainerPort: 8000 } ]
+          Environment:
+            - { Name: PORT,    Value: '8000' }
+            - { Name: DB_PATH, Value: /data/students.db }
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:  !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: web
+
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: api-trabajoinvestigacion-alb
+      Scheme: internet-facing
+      Type: application
+      Subnets: [!Ref SubnetPublic1, !Ref SubnetPublic2]
+      SecurityGroups: [!Ref AlbSG]
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: api-trabajoinvestigacion-tg
+      Port: 8000
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /health
+      Matcher: { HttpCode: "200-399" }
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions: [ { Type: forward, TargetGroupArn: !Ref TargetGroup } ]
+
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn: Listener
+    Properties:
+      Cluster: !Ref ECSCluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref TaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups: [!Ref ServiceSG]
+          Subnets: [!Ref SubnetPublic1, !Ref SubnetPublic2]
+      LoadBalancers:
+        - { ContainerName: web, ContainerPort: 8000, TargetGroupArn: !Ref TargetGroup }
+
+Outputs:
+  AlbDNS:
+    Description: DNS público del ALB
+    Value: !GetAtt ALB.DNSName
+  EcrRepoUri:
+    Description: URI del repo ECR
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepo}"
