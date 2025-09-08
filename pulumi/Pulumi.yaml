@@ -1,0 +1,24 @@
+name: fastapi-ecs-pulumi
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: FastAPI Students API deployed on AWS ECS Fargate using Pulumi
+template:
+  config:
+    aws:region:
+      description: The AWS region to deploy to
+      default: us-east-1
+    account_id:
+      description: AWS Account ID
+    iam_role_arn:
+      description: IAM Role ARN for ECS tasks
+    repo_name:
+      description: ECR repository name
+      default: fastapi-ecs
+    image_tag:
+      description: Docker image tag
+      default: latest
+    app_port:
+      description: Application port
+      default: 8080
