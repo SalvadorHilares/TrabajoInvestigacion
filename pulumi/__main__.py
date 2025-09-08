@@ -6,14 +6,17 @@ import json
 import pulumi
 import pulumi_aws as aws
 
-# Configuración
+# Configuración del proveedor AWS (idiomático, sin prefijo)
+aws_config = pulumi.Config("aws")
+region = aws_config.require("region")
+
+# Configuración de tu proyecto
 config = pulumi.Config()
-region = config.require("aws:region")
 account_id = config.require("account_id")
 iam_role_arn = config.require("iam_role_arn")
 repo_name = config.require("repo_name")
-image_tag = config.require("image_tag")
-app_port = int(config.require("app_port"))
+image_tag = config.get("image_tag") or "latest"
+app_port = int(config.get("app_port") or 8080)
 
 # Tags comunes
 common_tags = {
