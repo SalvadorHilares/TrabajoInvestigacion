@@ -8,7 +8,7 @@ InfraCdkStack(
     app, "InfraCdkStack",
     env=cdk.Environment(
         account="064912661622",
-        region="us-east-1",
+        region="us-east-1"
     ),
 )
 
